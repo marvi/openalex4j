@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "openalex-api-for-java-backlog": {
+      "command": "backlog",
+      "args": [
+        "mcp",
+        "start"
+      ]
+    }
+  }
+}
