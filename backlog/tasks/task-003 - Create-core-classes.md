@@ -1,9 +1,10 @@
 ---
 id: task-003
 title: Create core classes
-status: To Do
+status: Done
 assignee: []
 created_date: '2025-10-16 12:55'
+updated_date: '2025-10-16 13:26'
 labels:
   - enhancement
 dependencies: []
