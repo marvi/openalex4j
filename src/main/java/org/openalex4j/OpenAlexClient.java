@@ -4,6 +4,8 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.net.URI;
@@ -29,6 +31,7 @@ public class OpenAlexClient {
     private final List<String> allowedLanguages;
     private final List<String> conceptFilters;
     private final SearchMode searchMode;
+    private static final Logger LOG = LoggerFactory.getLogger(OpenAlexClient.class);
 
     private OpenAlexClient(HttpClient httpClient, ObjectMapper objectMapper) {
         this(httpClient, objectMapper, DEFAULT_LANGUAGES, List.of(), SearchMode.BROAD);
@@ -80,18 +83,26 @@ public class OpenAlexClient {
     }
 
     public List<Work> searchWorks(String query, int perPage) {
-        String url = API_BASE_URL + "/works?" + buildSearchQuery(query)
-                + "&per_page=" + perPage + buildFilterQuery() + "&sort=publication_date:desc";
+        String trimmed = Objects.requireNonNull(query, "query must not be null").trim();
+        if (trimmed.isEmpty()) {
+            throw new IllegalArgumentException("Search query must not be empty");
+        }
+        String url = API_BASE_URL + "/works?" + buildSearchQuery(trimmed)
+                + "&per_page=" + perPage + buildFilterQuery(trimmed) + "&sort=publication_date:desc";
         return executeSearch(url);
     }
 
     public List<Work> searchAllWorks(String query) {
         List<Work> allWorks = new ArrayList<>();
         String cursor = "*";
+        String trimmed = Objects.requireNonNull(query, "query must not be null").trim();
+        if (trimmed.isEmpty()) {
+            throw new IllegalArgumentException("Search query must not be empty");
+        }
         do {
-            String url = API_BASE_URL + "/works?" + buildSearchQuery(query)
+            String url = API_BASE_URL + "/works?" + buildSearchQuery(trimmed)
                     + "&per_page=" + DEFAULT_PAGE_SIZE
-                    + "&cursor=" + cursor + buildFilterQuery() + "&sort=publication_date:desc";
+                    + "&cursor=" + cursor + buildFilterQuery(trimmed) + "&sort=publication_date:desc";
             OpenAlexResponse<Work> response = executeSearchAndGetResponse(url);
             if (response.getResults() != null) {
                 allWorks.addAll(response.getResults());
@@ -119,6 +130,7 @@ public class OpenAlexClient {
                 .header("User-Agent", "openalex4j/1.0 (Java HttpClient)")
                 .GET()
                 .build();
+        LOG.debug("OpenAlex request: {}", url);
 
         try {
             HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
@@ -126,14 +138,17 @@ public class OpenAlexClient {
             String body = response.body();
 
             if (status < 200 || status >= 300) {
+                LOG.warn("OpenAlex response {} for URL {}", status, url);
                 throw new OpenAlexException("OpenAlex API request failed with status " + status + " for URL " + url + ": " + body);
             }
 
             return objectMapper.readValue(body, new TypeReference<OpenAlexResponse<Work>>() {});
         } catch (IOException e) {
+            LOG.error("I/O error calling OpenAlex", e);
             throw new OpenAlexException("Error executing search request to OpenAlex API", e);
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
+            LOG.error("Interrupted while calling OpenAlex", e);
             throw new OpenAlexException("OpenAlex API request interrupted", e);
         }
     }
@@ -157,13 +172,18 @@ public class OpenAlexClient {
         return "search=" + encodeQuery(expression);
     }
 
-    private String buildFilterQuery() {
+    private String buildFilterQuery(String trimmedQuery) {
         List<String> filters = new ArrayList<>();
         if (!allowedLanguages.isEmpty()) {
             filters.add("language:" + String.join("|", allowedLanguages));
         }
         if (!conceptFilters.isEmpty()) {
             filters.add("concept.id:" + String.join("|", conceptFilters));
+        }
+        if (searchMode == SearchMode.TITLE_ONLY) {
+            filters.add("title.search:" + trimmedQuery);
+        } else if (searchMode == SearchMode.ABSTRACT_ONLY) {
+            filters.add("abstract.search:" + trimmedQuery);
         }
         if (filters.isEmpty()) {
             return "";
