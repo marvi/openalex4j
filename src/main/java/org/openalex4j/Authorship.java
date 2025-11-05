@@ -1,9 +1,13 @@
 package org.openalex4j;
 
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonProperty;
+import lombok.Data;
 
 import java.util.List;
 
+@Data
+@JsonIgnoreProperties(ignoreUnknown = true)
 public class Authorship {
 
     private Contributor author;
@@ -14,77 +18,17 @@ public class Authorship {
     @JsonProperty("author_position")
     private String authorPosition;
 
-    public Contributor getAuthor() {
-        return author;
-    }
-
-    public void setAuthor(Contributor author) {
-        this.author = author;
-    }
-
-    public List<Institution> getInstitutions() {
-        return institutions;
-    }
-
-    public void setInstitutions(List<Institution> institutions) {
-        this.institutions = institutions;
-    }
-
-    public List<String> getCountries() {
-        return countries;
-    }
-
-    public void setCountries(List<String> countries) {
-        this.countries = countries;
-    }
-
-    public String getRawAuthorName() {
-        return rawAuthorName;
-    }
-
-    public void setRawAuthorName(String rawAuthorName) {
-        this.rawAuthorName = rawAuthorName;
-    }
-
-    public String getAuthorPosition() {
-        return authorPosition;
-    }
-
-    public void setAuthorPosition(String authorPosition) {
-        this.authorPosition = authorPosition;
-    }
-
+    @Data
+    @JsonIgnoreProperties(ignoreUnknown = true)
     public static class Contributor {
         private String id;
         @JsonProperty("display_name")
         private String displayName;
         private String orcid;
-
-        public String getId() {
-            return id;
-        }
-
-        public void setId(String id) {
-            this.id = id;
-        }
-
-        public String getDisplayName() {
-            return displayName;
-        }
-
-        public void setDisplayName(String displayName) {
-            this.displayName = displayName;
-        }
-
-        public String getOrcid() {
-            return orcid;
-        }
-
-        public void setOrcid(String orcid) {
-            this.orcid = orcid;
-        }
     }
 
+    @Data
+    @JsonIgnoreProperties(ignoreUnknown = true)
     public static class Institution {
         private String id;
         @JsonProperty("display_name")
@@ -92,37 +36,5 @@ public class Authorship {
         @JsonProperty("country_code")
         private String countryCode;
         private String type;
-
-        public String getId() {
-            return id;
-        }
-
-        public void setId(String id) {
-            this.id = id;
-        }
-
-        public String getDisplayName() {
-            return displayName;
-        }
-
-        public void setDisplayName(String displayName) {
-            this.displayName = displayName;
-        }
-
-        public String getCountryCode() {
-            return countryCode;
-        }
-
-        public void setCountryCode(String countryCode) {
-            this.countryCode = countryCode;
-        }
-
-        public String getType() {
-            return type;
-        }
-
-        public void setType(String type) {
-            this.type = type;
-        }
     }
 }

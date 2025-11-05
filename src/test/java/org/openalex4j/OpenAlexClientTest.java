@@ -10,6 +10,7 @@ import org.mockito.Mockito;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.time.LocalDate;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -130,7 +131,7 @@ public class OpenAlexClientTest {
         ArgumentCaptor<HttpRequest> captor = ArgumentCaptor.forClass(HttpRequest.class);
         Mockito.verify(mockClient).send(captor.capture(), ArgumentMatchers.<HttpResponse.BodyHandler<String>>any());
         String uri = captor.getValue().uri().toString();
-        org.junit.jupiter.api.Assertions.assertTrue(uri.contains("concept.id%3AC555206%7CC17744445"),
+        org.junit.jupiter.api.Assertions.assertTrue(uri.contains("concepts.id%3AC555206%7CC17744445"),
                 "Concept filter should be applied: " + uri);
         Mockito.clearInvocations(mockClient);
     }
@@ -150,6 +151,44 @@ public class OpenAlexClientTest {
         String uri = captor.getValue().uri().toString();
         org.junit.jupiter.api.Assertions.assertTrue(uri.contains("search=title%3A%22ritual+violence%22"),
                 "Title-only search should be used: " + uri);
+        Mockito.clearInvocations(mockClient);
+    }
+
+    @Test
+    public void testDateFilters() throws Exception {
+        LocalDate fromDate = LocalDate.now().minusDays(5);
+        OpenAlexClient dateClient = openAlexClient.withCreatedSince(5).withPublicationDateSince(10);
+        HttpResponse<String> response = mockHttpResponse(200, "{\"results\": []}");
+        when(mockClient.send(ArgumentMatchers.any(HttpRequest.class),
+                ArgumentMatchers.<HttpResponse.BodyHandler<String>>any()))
+                .thenReturn(response);
+
+        dateClient.searchWorks("test");
+
+        ArgumentCaptor<HttpRequest> captor = ArgumentCaptor.forClass(HttpRequest.class);
+        Mockito.verify(mockClient).send(captor.capture(), ArgumentMatchers.<HttpResponse.BodyHandler<String>>any());
+        String uri = captor.getValue().uri().toString();
+        org.junit.jupiter.api.Assertions.assertTrue(uri.contains("from_created_date%3A" + fromDate),
+                "from_created_date filter should be applied: " + uri);
+        org.junit.jupiter.api.Assertions.assertTrue(uri.contains("from_publication_date%3A" + LocalDate.now().minusDays(10)),
+                "from_publication_date filter should be applied: " + uri);
+        Mockito.clearInvocations(mockClient);
+    }
+
+    @Test
+    public void testWildcardSearch() throws Exception {
+        HttpResponse<String> response = mockHttpResponse(200, "{\"results\": []}");
+        when(mockClient.send(ArgumentMatchers.any(HttpRequest.class),
+                ArgumentMatchers.<HttpResponse.BodyHandler<String>>any()))
+                .thenReturn(response);
+
+        openAlexClient.searchWorks("*");
+
+        ArgumentCaptor<HttpRequest> captor = ArgumentCaptor.forClass(HttpRequest.class);
+        Mockito.verify(mockClient).send(captor.capture(), ArgumentMatchers.<HttpResponse.BodyHandler<String>>any());
+        String uri = captor.getValue().uri().toString();
+        org.junit.jupiter.api.Assertions.assertFalse(uri.contains("search="),
+                "Search parameter should not be present for wildcard search: " + uri);
         Mockito.clearInvocations(mockClient);
     }
 

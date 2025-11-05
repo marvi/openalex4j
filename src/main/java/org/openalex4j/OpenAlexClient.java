@@ -15,6 +15,7 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
+import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
@@ -31,23 +32,32 @@ public class OpenAlexClient {
     private final List<String> allowedLanguages;
     private final List<String> conceptFilters;
     private final SearchMode searchMode;
+    private final LocalDate fromCreatedDate;
+    private final LocalDate fromPublicationDate;
     private static final Logger LOG = LoggerFactory.getLogger(OpenAlexClient.class);
 
     private OpenAlexClient(HttpClient httpClient, ObjectMapper objectMapper) {
-        this(httpClient, objectMapper, DEFAULT_LANGUAGES, List.of(), SearchMode.BROAD);
+        this(httpClient, objectMapper, DEFAULT_LANGUAGES, List.of(), SearchMode.BROAD, null, null);
     }
 
     private OpenAlexClient(HttpClient httpClient, ObjectMapper objectMapper, List<String> languages) {
-        this(httpClient, objectMapper, languages, List.of(), SearchMode.BROAD);
+        this(httpClient, objectMapper, languages, List.of(), SearchMode.BROAD, null, null);
     }
 
     private OpenAlexClient(HttpClient httpClient, ObjectMapper objectMapper, List<String> languages, List<String> concepts,
                            SearchMode searchMode) {
+        this(httpClient, objectMapper, languages, concepts, searchMode, null, null);
+    }
+
+    private OpenAlexClient(HttpClient httpClient, ObjectMapper objectMapper, List<String> languages, List<String> concepts,
+                           SearchMode searchMode, LocalDate fromCreatedDate, LocalDate fromPublicationDate) {
         this.httpClient = Objects.requireNonNull(httpClient, "httpClient must not be null");
         this.objectMapper = Objects.requireNonNull(objectMapper, "objectMapper must not be null");
         this.allowedLanguages = List.copyOf(normalizeLanguages(languages));
         this.conceptFilters = List.copyOf(normalizeConcepts(concepts));
         this.searchMode = Objects.requireNonNullElse(searchMode, SearchMode.BROAD);
+        this.fromCreatedDate = fromCreatedDate;
+        this.fromPublicationDate = fromPublicationDate;
     }
 
     public static OpenAlexClient create() {
@@ -56,26 +66,48 @@ public class OpenAlexClient {
                 .build();
         ObjectMapper mapper = new ObjectMapper();
         mapper.registerModule(new JavaTimeModule());
-        mapper.configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
-        return new OpenAlexClient(client, mapper, DEFAULT_LANGUAGES, List.of(), SearchMode.BROAD);
+        return new OpenAlexClient(client, mapper, DEFAULT_LANGUAGES, List.of(), SearchMode.BROAD, null, null);
     }
 
     static OpenAlexClient create(HttpClient client, ObjectMapper objectMapper) {
-        objectMapper.configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
         objectMapper.registerModule(new JavaTimeModule());
-        return new OpenAlexClient(client, objectMapper, DEFAULT_LANGUAGES, List.of(), SearchMode.BROAD);
+        return new OpenAlexClient(client, objectMapper, DEFAULT_LANGUAGES, List.of(), SearchMode.BROAD, null, null);
     }
 
     public OpenAlexClient withAllowedLanguages(List<String> languages) {
-        return new OpenAlexClient(httpClient, objectMapper, languages, conceptFilters, searchMode);
+        return new OpenAlexClient(httpClient, objectMapper, languages, conceptFilters, searchMode, fromCreatedDate, fromPublicationDate);
     }
 
     public OpenAlexClient withConcepts(List<String> concepts) {
-        return new OpenAlexClient(httpClient, objectMapper, allowedLanguages, concepts, searchMode);
+        return new OpenAlexClient(httpClient, objectMapper, allowedLanguages, concepts, searchMode, fromCreatedDate, fromPublicationDate);
     }
 
     public OpenAlexClient withSearchMode(SearchMode mode) {
-        return new OpenAlexClient(httpClient, objectMapper, allowedLanguages, conceptFilters, mode);
+        return new OpenAlexClient(httpClient, objectMapper, allowedLanguages, conceptFilters, mode, fromCreatedDate, fromPublicationDate);
+    }
+
+    public OpenAlexClient withFromCreatedDate(LocalDate fromCreatedDate) {
+        return new OpenAlexClient(httpClient, objectMapper, allowedLanguages, conceptFilters, searchMode, fromCreatedDate, fromPublicationDate);
+    }
+
+    public OpenAlexClient withFromPublicationDate(LocalDate fromPublicationDate) {
+        return new OpenAlexClient(httpClient, objectMapper, allowedLanguages, conceptFilters, searchMode, fromCreatedDate, fromPublicationDate);
+    }
+
+    public OpenAlexClient withCreatedSince(int days) {
+        if (days <= 0) {
+            throw new IllegalArgumentException("Days must be a positive number.");
+        }
+        LocalDate fromDate = LocalDate.now().minusDays(days);
+        return new OpenAlexClient(httpClient, objectMapper, allowedLanguages, conceptFilters, searchMode, fromDate, fromPublicationDate);
+    }
+
+    public OpenAlexClient withPublicationDateSince(int days) {
+        if (days <= 0) {
+            throw new IllegalArgumentException("Days must be a positive number.");
+        }
+        LocalDate fromDate = LocalDate.now().minusDays(days);
+        return new OpenAlexClient(httpClient, objectMapper, allowedLanguages, conceptFilters, searchMode, fromCreatedDate, fromDate);
     }
 
     public List<Work> searchWorks(String query) {
@@ -87,8 +119,9 @@ public class OpenAlexClient {
         if (trimmed.isEmpty()) {
             throw new IllegalArgumentException("Search query must not be empty");
         }
-        String url = API_BASE_URL + "/works?" + buildSearchQuery(trimmed)
-                + "&per_page=" + perPage + buildFilterQuery(trimmed) + "&sort=publication_date:desc";
+        String searchQuery = buildSearchQuery(trimmed);
+        String url = API_BASE_URL + "/works?" + searchQuery
+                + (searchQuery.isEmpty() ? "" : "&") + "per_page=" + perPage + buildFilterQuery(trimmed) + "&sort=publication_date:desc";
         return executeSearch(url);
     }
 
@@ -99,9 +132,10 @@ public class OpenAlexClient {
         if (trimmed.isEmpty()) {
             throw new IllegalArgumentException("Search query must not be empty");
         }
+        String searchQuery = buildSearchQuery(trimmed);
         do {
-            String url = API_BASE_URL + "/works?" + buildSearchQuery(trimmed)
-                    + "&per_page=" + DEFAULT_PAGE_SIZE
+            String url = API_BASE_URL + "/works?" + searchQuery
+                    + (searchQuery.isEmpty() ? "" : "&") + "per_page=" + DEFAULT_PAGE_SIZE
                     + "&cursor=" + cursor + buildFilterQuery(trimmed) + "&sort=publication_date:desc";
             OpenAlexResponse<Work> response = executeSearchAndGetResponse(url);
             if (response.getResults() != null) {
@@ -163,6 +197,9 @@ public class OpenAlexClient {
         if (trimmed.isEmpty()) {
             throw new IllegalArgumentException("Search query must not be empty");
         }
+        if ("*".equals(trimmed)) {
+            return "";
+        }
         String expression = switch (searchMode) {
             case TITLE_ONLY -> "title:\"" + trimmed + "\"";
             case ABSTRACT_ONLY -> "abstract:\"" + trimmed + "\"";
@@ -178,7 +215,13 @@ public class OpenAlexClient {
             filters.add("language:" + String.join("|", allowedLanguages));
         }
         if (!conceptFilters.isEmpty()) {
-            filters.add("concept.id:" + String.join("|", conceptFilters));
+            filters.add("concepts.id:" + String.join("|", conceptFilters));
+        }
+        if (fromCreatedDate != null) {
+            filters.add("from_created_date:" + fromCreatedDate);
+        }
+        if (fromPublicationDate != null) {
+            filters.add("from_publication_date:" + fromPublicationDate);
         }
         if (searchMode == SearchMode.TITLE_ONLY) {
             filters.add("title.search:" + trimmedQuery);

@@ -36,13 +36,13 @@ The project uses SLF4J for logging, Jackson for JSON mapping, and Java’s built
 ./mvnw clean package
 
 # run CLI (default broad search)
-java -jar target/openalex4j-1.0-SNAPSHOT-cli.jar "quantum computing"
+java -jar target/openalex4j-1.2-SNAPSHOT-cli.jar "quantum computing"
 
 # run tests
 ./mvnw test
 ```
 
-The default build produces both `openalex4j-1.0-SNAPSHOT.jar` (library) and a shaded CLI jar under `target/`.
+The default build produces both `openalex4j-1.2-SNAPSHOT.jar` (library) and a shaded CLI jar under `target/`.
 
 ---
 
@@ -100,7 +100,19 @@ List<Work> filtered = client
 
 - Languages are normalized to lowercase and deduplicated.
 - Concepts accept raw OpenAlex concept IDs.
-- Filters are combined using OpenAlex’s `filter=` syntax (`language:` and `concept.id:`).
+- Filters are combined using OpenAlex’s `filter=` syntax (`language:` and `concepts.id:`).
+
+### Date filters
+
+You can also filter works by their creation or publication date.
+
+```java
+// Works created in the last 10 days
+List<Work> recentWorks = client.withCreatedSince(10).searchWorks("*");
+
+// Works published since January 1, 2023
+List<Work> publishedWorks = client.withFromPublicationDate(LocalDate.of(2023, 1, 1)).searchWorks("*");
+```
 
 ### Handling responses
 
@@ -137,7 +149,7 @@ If OpenAlex returns an error or parsing fails, an `OpenAlexException` (unchecked
 
 ```bash
 ./mvnw package
-ls target/openalex4j-1.0-SNAPSHOT-cli.jar
+ls target/openalex4j-1.2-SNAPSHOT-cli.jar
 ```
 
 The shaded jar includes dependencies and uses the same defaults as the Java API (languages `sv|da|no|de|fr|en`, broad search).
@@ -150,6 +162,8 @@ Run `java -jar openalex4j-…-cli.jar --help` for usage. Key options:
 |--------------------------|--------------------------------------------------------------------------------------|
 | `--languages`, `-l`      | Comma-separated language codes (`en,sv,de`). Overrides default language whitelist.   |
 | `--concepts`, `-c`       | Comma-separated OpenAlex concept IDs (`C555206`).                                    |
+| `--created-since`        | Filter by works created within the last _N_ days.                                    |
+| `--published-since`      | Filter by works published within the last _N_ days.                                  |
 | `--per-page`, `-n`       | Page size (1–200). Default 5.                                                        |
 | `--search-mode`, `-s`    | `broad` (default), `title`, `abstract`, `title-abstract`.                            |
 | `--show-abstract`, `-a`  | Print up to 400 characters of the reconstructed abstract.                            |
@@ -157,6 +171,7 @@ Run `java -jar openalex4j-…-cli.jar --help` for usage. Key options:
 The CLI output displays:
 
 - Title, year, type and primary venue.
+- Publication date, along with created/updated timestamps when available.
 - DOI/full text URL.
 - Citation count, OA status.
 - Institutions (with country code if available).
@@ -167,10 +182,10 @@ The CLI output displays:
 
 ```bash
 # Broad search with defaults (languages sv/da/no/de/fr/en)
-java -jar target/openalex4j-1.0-SNAPSHOT-cli.jar "quantum computing"
+java -jar target/openalex4j-1.2-SNAPSHOT-cli.jar "quantum computing"
 
 # Title-only search limited to English & Swedish and theology concepts
-java -jar target/openalex4j-1.0-SNAPSHOT-cli.jar \
+java -jar target/openalex4j-1.2-SNAPSHOT-cli.jar \
   --languages en,sv \
   --concepts C555206,C17744445 \
   --search-mode title \
@@ -178,7 +193,7 @@ java -jar target/openalex4j-1.0-SNAPSHOT-cli.jar \
   "church"
 
 # Abstract-only search in English, Spanish, Portuguese (no concept filter)
-java -jar target/openalex4j-1.0-SNAPSHOT-cli.jar \
+java -jar target/openalex4j-1.2-SNAPSHOT-cli.jar \
   --languages en,es,pt \
   --search-mode abstract \
   "ritual violence"
@@ -229,7 +244,7 @@ For local CLI smoke tests:
 
 ```bash
 ./mvnw package
-java -jar target/openalex4j-1.0-SNAPSHOT-cli.jar --search-mode title "theology"
+java -jar target/openalex4j-1.2-SNAPSHOT-cli.jar --search-mode title "theology"
 ```
 
 ---
@@ -242,3 +257,17 @@ java -jar target/openalex4j-1.0-SNAPSHOT-cli.jar --search-mode title "theology"
 - For heavy usage, consider adding caching or respect OpenAlex rate limits (`mailto` query param in manual API calls).
 
 Contributions and bug reports are welcome. Use tasks in `backlog/` directory to stay aligned with the MCP workflow.
+
+## OpenAlex concept id:s for Theology
+* Teologi (Theology): C27206212
+* Kyrkohistoria (Church history): C10869588 
+* Bibelvetenskap (Biblical studies): C194105502
+* Religionsfilosofi (Philosophy of religion): C81698637
+* Kyrka (Church): C2781269069
+* Liturgy: C2777852031
+* Canon law: C54707276
+* Biblical Theology: C542772349
+* Systematic Theology: C62485664
+* Missionsvetenskap: C2780362431
+
+`java -jar target/openalex4j-1.2-SNAPSHOT-cli.jar --concepts C542772349,C62485664,C2780362431,C10869588,C194105502,C128554421,C81698637,C2781269069 --languages sv,en,de --published-since 365 "*"`

@@ -9,6 +9,7 @@ import org.openalex4j.Work;
 
 import java.io.ByteArrayOutputStream;
 import java.io.PrintStream;
+import java.time.LocalDate;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
@@ -66,6 +67,9 @@ class OpenAlexCliTest {
         work.setPublicationYear(2024);
         work.setType("article");
         work.setCitedByCount(42);
+        work.setPublicationDate(LocalDate.of(2024, 4, 28));
+        work.setCreatedDate(LocalDate.of(2024, 4, 1));
+        work.setUpdatedDate(LocalDate.of(2024, 5, 2));
         Work.Source source = new Work.Source();
         source.setDisplayName("Journal of Testing");
         Work.Location location = new Work.Location();
@@ -102,6 +106,9 @@ class OpenAlexCliTest {
         assertTrue(output.contains("Top 1 result"), "Should print summary line");
         assertTrue(output.contains("Sample Work"), "Should print work display name");
         assertTrue(output.contains("Full text: https://example.org/fulltext.pdf"), "Should surface full text link");
+        assertTrue(output.contains("Publication date: 2024-04-28"), "Should surface publication date");
+        assertTrue(output.contains("Created: 2024-04-01"), "Should surface created date when available");
+        assertTrue(output.contains("Updated: 2024-05-02"), "Should surface updated date when available");
         assertTrue(output.contains("Cited by: 42"), "Should surface citation count");
         assertTrue(output.contains("OA: gold"), "Should surface open access status");
         assertTrue(output.contains("Institutions: Quantum Institute (SE)"), "Should surface institution and country");
@@ -189,5 +196,23 @@ class OpenAlexCliTest {
         assertEquals(0, exitCode);
         verify(mockClient).withSearchMode(OpenAlexClient.SearchMode.TITLE_ONLY);
         verify(mockClient).searchWorks("ritual violence", 5);
+    }
+
+    @Test
+    void runWithDateFiltersAppliesFilters() {
+        OpenAlexClient mockClient = Mockito.mock(OpenAlexClient.class);
+        when(mockClient.withCreatedSince(Mockito.anyInt())).thenReturn(mockClient);
+        when(mockClient.withPublicationDateSince(Mockito.anyInt())).thenReturn(mockClient);
+        when(mockClient.withSearchMode(Mockito.any())).thenReturn(mockClient);
+        when(mockClient.searchWorks(eq("test"), eq(5))).thenReturn(List.of());
+        Supplier<OpenAlexClient> supplier = () -> mockClient;
+        OpenAlexCli cli = new OpenAlexCli(supplier, outStream, errStream);
+
+        int exitCode = cli.run(new String[]{"--created-since", "10", "--published-since", "20", "test"});
+
+        assertEquals(0, exitCode);
+        verify(mockClient).withCreatedSince(10);
+        verify(mockClient).withPublicationDateSince(20);
+        verify(mockClient).searchWorks("test", 5);
     }
 }

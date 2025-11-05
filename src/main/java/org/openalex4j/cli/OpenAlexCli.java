@@ -6,6 +6,7 @@ import org.openalex4j.OpenAlexException;
 import org.openalex4j.Work;
 
 import java.io.PrintStream;
+import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -61,6 +62,12 @@ public class OpenAlexCli {
             if (parsed.concepts != null) {
                 client = client.withConcepts(parsed.concepts);
             }
+            if (parsed.createdSince != null) {
+                client = client.withCreatedSince(parsed.createdSince);
+            }
+            if (parsed.publishedSince != null) {
+                client = client.withPublicationDateSince(parsed.publishedSince);
+            }
             client = client.withSearchMode(parsed.searchMode);
             List<Work> works = client.searchWorks(query, perPage);
             if (works.isEmpty()) {
@@ -92,6 +99,8 @@ public class OpenAlexCli {
         List<String> queryParts = new ArrayList<>();
         List<String> languages = null;
         List<String> concepts = null;
+        Integer createdSince = null;
+        Integer publishedSince = null;
         boolean showAbstract = false;
         OpenAlexClient.SearchMode searchMode = OpenAlexClient.SearchMode.BROAD;
 
@@ -137,6 +146,30 @@ public class OpenAlexCli {
                     return ParsedInput.invalid();
                 }
                 concepts = parsedConcepts;
+            } else if ("--created-since".equals(arg)) {
+                if (i + 1 >= args.length) {
+                    err.println("Missing value for --created-since option.");
+                    return ParsedInput.invalid();
+                }
+                String value = args[++i];
+                try {
+                    createdSince = Integer.parseInt(value);
+                } catch (NumberFormatException ex) {
+                    err.printf("Invalid value for --created-since: %s%n", value);
+                    return ParsedInput.invalid();
+                }
+            } else if ("--published-since".equals(arg)) {
+                if (i + 1 >= args.length) {
+                    err.println("Missing value for --published-since option.");
+                    return ParsedInput.invalid();
+                }
+                String value = args[++i];
+                try {
+                    publishedSince = Integer.parseInt(value);
+                } catch (NumberFormatException ex) {
+                    err.printf("Invalid value for --published-since: %s%n", value);
+                    return ParsedInput.invalid();
+                }
             } else if ("--show-abstract".equals(arg) || "-a".equals(arg)) {
                 showAbstract = true;
             } else if ("--search-mode".equals(arg) || "-s".equals(arg)) {
@@ -171,7 +204,7 @@ public class OpenAlexCli {
         }
 
         String query = String.join(" ", queryParts);
-        return ParsedInput.valid(query, perPage, languages, concepts, showAbstract, searchMode);
+        return ParsedInput.valid(query, perPage, languages, concepts, showAbstract, searchMode, createdSince, publishedSince);
     }
 
     private String formatWork(Work work, boolean showAbstract, int index) {
@@ -196,6 +229,9 @@ public class OpenAlexCli {
 
         appendDetail(builder, "DOI", doi);
         appendDetail(builder, "Full text", fulltextUrl);
+        appendDetail(builder, "Publication date", formatDate(work.getPublicationDate()));
+        appendDetail(builder, "Created", formatDate(work.getCreatedDate()));
+        appendDetail(builder, "Updated", formatDate(work.getUpdatedDate()));
         if (work.getCitedByCount() > 0) {
             appendDetail(builder, "Cited by", String.valueOf(work.getCitedByCount()));
         }
@@ -266,11 +302,13 @@ public class OpenAlexCli {
     private void printUsage(PrintStream stream) {
         stream.println("Usage: openalex-cli [--per-page <1-200>] <search terms>");
         stream.println("Options:");
-        stream.println("  --languages, -l <codes>   Comma-separated language codes to include (e.g. en,sv,de)");
-        stream.println("  --concepts, -c <ids>      Comma-separated OpenAlex concept IDs (e.g. C555206,C17744445)");
-        stream.println("  --per-page, -n <number>   Number of results per page (default 5, max 200)");
-        stream.println("  --show-abstract, -a       Include abstract text (up to 400 characters)");
-        stream.println("  --search-mode, -s <mode>  Search scope: broad (default), title, abstract, title-abstract");
+        stream.println("  --languages, -l <codes>      Comma-separated language codes to include (e.g. en,sv,de)");
+        stream.println("  --concepts, -c <ids>         Comma-separated OpenAlex concept IDs (e.g. C555206,C17744445)");
+        stream.println("  --created-since <days>       Filter by works created in the last N days");
+        stream.println("  --published-since <days>     Filter by works published in the last N days");
+        stream.println("  --per-page, -n <number>      Number of results per page (default 5, max 200)");
+        stream.println("  --show-abstract, -a          Include abstract text (up to 400 characters)");
+        stream.println("  --search-mode, -s <mode>     Search scope: broad (default), title, abstract, title-abstract");
         stream.println("Examples:");
         stream.println("  openalex-cli quantum computing");
         stream.println("  openalex-cli --per-page 3 \"graph neural networks\"");
@@ -284,11 +322,13 @@ public class OpenAlexCli {
         private final int perPage;
         private final List<String> languages;
         private final List<String> concepts;
+        private final Integer createdSince;
+        private final Integer publishedSince;
         private final boolean showAbstract;
         private final OpenAlexClient.SearchMode searchMode;
 
         private ParsedInput(boolean valid, String query, int perPage, List<String> languages, List<String> concepts,
-                            boolean showAbstract, OpenAlexClient.SearchMode searchMode) {
+                            boolean showAbstract, OpenAlexClient.SearchMode searchMode, Integer createdSince, Integer publishedSince) {
             this.valid = valid;
             this.query = query;
             this.perPage = perPage;
@@ -296,16 +336,18 @@ public class OpenAlexCli {
             this.concepts = concepts;
             this.showAbstract = showAbstract;
             this.searchMode = searchMode;
+            this.createdSince = createdSince;
+            this.publishedSince = publishedSince;
         }
 
         static ParsedInput invalid() {
             return new ParsedInput(false, null, DEFAULT_PAGE_SIZE, null, null, false,
-                    OpenAlexClient.SearchMode.BROAD);
+                    OpenAlexClient.SearchMode.BROAD, null, null);
         }
 
         static ParsedInput valid(String query, int perPage, List<String> languages, List<String> concepts,
-                                 boolean showAbstract, OpenAlexClient.SearchMode searchMode) {
-            return new ParsedInput(true, query, perPage, languages, concepts, showAbstract, searchMode);
+                                 boolean showAbstract, OpenAlexClient.SearchMode searchMode, Integer createdSince, Integer publishedSince) {
+            return new ParsedInput(true, query, perPage, languages, concepts, showAbstract, searchMode, createdSince, publishedSince);
         }
     }
 
@@ -374,6 +416,10 @@ public class OpenAlexCli {
             return;
         }
         builder.append("   ").append(label).append(": ").append(value).append(System.lineSeparator());
+    }
+
+    private String formatDate(LocalDate date) {
+        return date != null ? date.toString() : "";
     }
 
     private String truncate(String text, int maxLength) {
